@@ -26,6 +26,7 @@
 \newcommand{\cHDI}{\ensuremath{\mathrm{HD}}}
 \newcommand{\fH}{\ensuremath{f_{\mathrm{H}}}}
 \newcommand{\fHmol}{\ensuremath{f_{\mathrm{H_2}}}}
+\newcommand{\yt}{\texttt{yt}}
 
 \bibliographystyle{apj}
 \usepackage{natbib}
@@ -36,8 +37,7 @@
 
 \begin{document}
 
-\title{Introducing yt 3.0: Addressing the Needs of Divergent Simulation
-Methods}
+\title{Introducing yt 3.0: Analysis and Visualization of Volumetric Data}
 \author{The \yt{} Collaboration{1}}
 \email{}
 \altaffiltext{1}{The Globe} 
@@ -54,79 +54,66 @@ Methods}
 
 \maketitle
 
+% n.b.:
+% http://tex.stackexchange.com/questions/246/when-should-i-use-input-vs-include
+
 \section{Introduction}
+\input{sections/intro.tex}
 
 \section{Community Building}
+\input{sections/community_building.tex}
 
 \section{Development Procedure}
-
-\subsection{Answer Testing}
-
-\subsection{Code Review}
-
-\subsection{YTEP Process}
+\input{sections/development_procedure.tex}
 
 \section{Data Objects and Data Selection}
 % Based on selectors
 % Mention: Isocontours
+\input{sections/data_objects.tex}
 
 \section{Data Processing and Analysis}
+\input{sections/processing_and_analysis.tex}
 
-\section{Visualization}
+\section{Visualization and Volume Rendering}
+\input{sections/viz_and_volrendering.tex}
 
 \section{Dimensional Analysis and Unit Systems}
-
-\include{sections/units_and_quantities}
+\input{sections/units_and_quantities}
 
 \section{Abstracting Simulation Types}
+\input{sections/abstracting_simulation_types.tex}
 
-\subsection{Decomposition Strategies}
-
-\subsection{Grid Analysis}
-
-\subsection{Octree Analysis}
-
-\subsection{SPH Analysis}
-
-\subsection{Unstructured Mesh Analysis}
-
-\subsection{Non-Cartesian Coordinates}
+\section{Units and Quantities}
+\input{sections/units_and_quantities.tex}
 
 \section{User-Friendliness}
-
-\subsection{Publication-Ready Figures}
-
-\subsection{IPython Integration and HTML GUIs}
+\input{sections/user_friendliness.tex}
 
 \section{Halo Finding and Catalogs}
+\input{sections/halo_finding_and_catalogs.tex}
 
 \section{Scaling and Parallelism}
-
-\subsection{Performance of Operations}
-% Profiles
-% Quadtree
-
-\subsection{Inline Analysis}
-
-\subsection{Simple Parallelism}
-% Parallel objects
+\input{sections/scaling_parallelism.tex}
 
 \section{Simulation Support Structures}
-
-\subsection{GDF-IO}
-
-\subsection{Initial Conditions Generation}
+\input{sections/simulation_support.tex}
 
 \section{Astrophysical Analysis Modules}
+\input{sections/analysis_modules.tex}
 % Tons of these.
 % Mention external packages we interface with
 
 \section{Future Directions}
+\input{sections/future_directions.tex}
 
 \section{Conclusions}\label{sec:conclusions}
+\input{sections/conclusions.tex}
 
 \acknowledgments 
+\input{sections/acks.tex}
 
-%\bibliography{mjt}
+% ADS library:
+% http://adsabs.harvard.edu/cgi-bin/nph-abs_connect?library&libname=yt&libid=54a19bc904
+\bibliography{mjt}
 
 \end{document}

@@ -1,8 +1,13 @@
 syntax: glob
-auto
-ms*
-*aux
-*log
-*fls
-*latexmk
-msNotes.bib
+*.aux
+*.bbl
+*.blg
+*.dvi
+*.el
+*.fdb_latexmk
+*.fls
+*.log
+*.pyc
+*.pdf
+*.synctex.gz
+.*.swp
