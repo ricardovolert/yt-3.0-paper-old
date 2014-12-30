@@ -1,7 +1,8 @@
-ms.aux
-ms.fdb_latexmk
-ms.fls
-ms.log
-ms.pdf
-ms.synctex.gz
+syntax: glob
+auto
+ms*
+*aux
+*log
+*fls
+*latexmk
 msNotes.bib
