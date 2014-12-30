@@ -1,0 +1,375 @@
+\section{Dimensional Analysis and Units}
+
+At a basic level, \texttt{yt} is an engine for converting data dumped to disk
+by a simulation code into a physically meaningful result.  Attaching units to
+simulation data makes it possible to perform dimensional analysis on the
+simulation data, adding additional opportunities for catching errors in a data
+processing pipeline.  In addition, it becomes straightforward to convert data
+from one unit system to another.
+
+In \texttt{yt 3.0} we handle units in a an automatic fashion, leveraging the
+symbolic math library \texttt{sympy}. Instead of returning a NumPy
+\texttt{ndarray} when users query \texttt{yt} data objects for fields, return a
+\texttt{YTArray}, a subclass of \texttt{ndarray}. \texttt{YTArray} preserves
+\texttt{ndarray}'s array operations, including deep and shallow copies,
+broadcasting, and views.  Augmenting texttt{ndarray}, \texttt{YTArray} attaches
+unit metadata to the array data, enabling runtime checking of unit consistency
+in arithmetic operations between \texttt{YTArray} instances, and making it
+trivial to compose new units using algebraic operations.
+
+As a trivial example, when one queries a data object (here given the generic
+name \texttt{dd}) for the density field, we get back a YTArray, including both
+the simulation data for the density field, and the units of the density field,
+in this case $\rm{g}/\rm{cm}^3$:
+
+\begin{Verbatim}
+>>> dd[`density'] 
+YTArray([4.92e-31, 4.94e-31, 4.93e-31, ...,
+         1.12e-25, 1.59e-25, 1.09e-24]) g/cm**3
+\end{Verbatim}
+
+One of the nicest aspects of this new unit system is that the symbolic
+algebra for unitful operations is performed automatically by sympy:
+
+\begin{Verbatim}
+>>> print dd[`cell_mass']/dd[`cell_volume'] 
+  [4.92e-31 4.94e-31 4.93e-31 ... 
+   1.12e-25 1.59e-25 1.09e-24] g/cm**3
+\end{Verbatim}
+
+YTArray is primarily useful for attaching units to NumPy \texttt{ndarray}
+instances. For scalar data, we have created the new \texttt{YTQuantity} class.
+\texttt{YTQuantity} is a subclass of \texttt{YTArray} with the requirement that
+the ``array data'' associated with the instance be limited to one
+element. \texttt{YTQuantity} is primarily useful for physical constants and
+ensures that the units are propogated correctly when composing quantities from
+arrays, physical constants, and unitless scalars:
+
+\begin{Verbatim}
+>>> from yt.utilities.physical_constants import
+        boltzmann_constant
+>>> print dd[`temperature']*boltzmann_constant 
+[ 1.28e-12 1.29e-12 1.29e-12 ... 
+  1.63e-12 1.59e-12 1.40e-12] erg
+\end{Verbatim}
+
+If a user needs the field in a different unit system, they can quickly convert
+using \texttt{convert\_to\_units} or \texttt{in\_units}.
+
+When a \texttt{Dataset} object is instantiated, it will its self instantiate and
+set up a \texttt{UnitRegistry} class that contains a full set of units that are
+defined for the simulation. This registry includes both concrete physical units
+like \texttt{cm} or \texttt{K} but also units symbols that correspond to the
+unit system used internally in the simulation.
+
+The new unit systems lets us to encode the simulation coordinate system
+and scaling to physical coordinates directly into the unit system. We do
+this via ``code units''.
+
+Every \texttt{Dataset} has a \texttt{length\_unit},
+\texttt{time\_unit}, and \texttt{mass\_unit},
+attribute that the user can quickly and easily query to discover the
+base units of the simulation. For example:
+
+\begin{Verbatim}
+>>> import yt
+>>> ds = yt.load("Enzo_64/DD0043/data0043")
+>>> print ds.length_unit 
+128 Mpccm/h
+>>> print ds.quan(1.0, "code_length").in_units("Mpccm/h")
+128 Mpccm/h
+>>> print ds.length_unit.in_cgs()
+5.55517285026e+26 cm
+\end{Verbatim}
+
+Optionally \texttt{velocity\_unit}, \texttt{pressure\_unit},
+\texttt{temperature\_unit}, and \texttt{density\_unit} may be defined as well if
+the units for these fields cannot be inferred from the mass, length, and time
+units.
+
+Additionally, we allow conversions to the simulation unit system. Data in code
+units are available by converting to \texttt{code\_length}, \texttt{code\_mass},
+\texttt{code\_time}, \texttt{code\_velocity}, \texttt{code\_density},
+\texttt{code\_magnetic}, \texttt{code\_pressure}, \texttt{code\_metallicity}, or
+any combination of those units. Code units preserve dimensionality: an
+array or quantity that has units of \texttt{cm} will be convertible to
+\texttt{code\_length}, but not to \texttt{code\_mass}.
+
+On-disk data are also be available to the user, presented in
+unconverted code units. To obtain on-disk data, a user need only query a
+data object using an on-disk field name:
+
+\begin{Verbatim}
+>>> import yt
+>>> ds = yt.load(``Enzo\_64''/DD0043/data0043")
+>>> dd = ds.all\_data()
+>>> print dd[('enzo', 'Density')] 
+[ 6.74e-02 6.12e-02 8.92e-02 ... 
+  9.09e+01 5.66e+01 4.27e+01] code_mass/code_length**3
+>>> print dd[('gas', 'density')] 
+[ 1.92e-31 1.74e-31 2.54e-31 ... 
+  2.59e-28 1.61e-28 1.22e-28] g/cm**3
+\end{Verbatim}
+
+Here, the first data object query is returned in code units, while the second is
+returned in CGS units. This is because \verb!(`enzo', `Density')! is an on-disk
+field, while \verb!(`gas', `density')! is an internal \texttt{yt} field.
+
+\subsubsection{Implementation}\label{implementation}
+
+Our unit system has 6 base dimensions, \texttt{mass}, \texttt{length},
+\texttt{time}, \texttt{temperature}, and \texttt{angle}. The unitless
+\texttt{dimensionless} dimension, which we use to represent scalars is also
+technically a base dimension, although a trivial one.  For convenience, we also
+create dimensionless unit symbols to represent quantities like metallicity that
+are formally dimensionless, but it is convenient to represent in a unit system.
+
+For each dimension, we choose a base unit. Our system's base units are grams,
+centimeters, seconds, Kelvin, and radian.  All units can be described as
+combinations of these base dimensions along with a conversion factor to
+equivalent base units.
+
+The choice of CGS as the base unit system is somewhat arbitrary. Most unit
+systems choose SI as the reference unit system. We use CGS to stay consistent
+with the rest of the \texttt{yt} codebase and to reflect the standard practice
+in astrophysics. In any case, using a \emph{physical} coordinate system makes it
+possible to compare quantities and arrays produced by different datasets,
+possibly with different conversion factors to CGS and to code units. We go into
+more detail on this point below.  In the future, we plan to make the preferred
+internal coordinate system a user-configurable option.
+
+We provide sympy \texttt{Symbol} objects for the base dimensions. The
+dimensionality of all other units should be \texttt{sympy} \texttt{Expr} objects
+made up of the base dimension objects and the \texttt{sympy} operation objects
+\texttt{Mul} and \texttt{Pow}.
+
+Let's use some common units as examples: gram (\texttt{g}), erg (\texttt{erg}),
+and solar mass per cubic megaparsec (\texttt{Msun / Mpc$^3$}). \texttt{g} is an
+atomic, CGS base unit, \texttt{erg} is an atomic unit in CGS, but is not a base
+unit, and \texttt{Msun/Mpc$^3$} is a combination of atomic units, which are not
+in CGS, and one of them even has an SI prefix. The dimensions of \texttt{g} are
+\texttt{mass} and the cgs factor is 1. The dimensions of \texttt{erg} are
+\texttt{mass * length$^2$ * time$^{-2}$} and the cgs factor is 1. The dimensions
+of \texttt{Msun/Mpc$^3$} are \texttt{mass / length$^3$} and the cgs factor is
+about 6.8e-41.
+
+We use the \texttt{UnitRegistry} class to define all valid atomic units.
+All unit registries contain a unit symbol lookup table (dict) containing
+the valid units' dimensionality and cgs conversion factor. Here is what
+it would look like with the above units:
+
+\begin{Verbatim}
+{ "g":    (mass, 1.0),
+  "erg":  (mass * length**2 * time**-2, 1.0),
+  "Msun": (mass, 1.98892e+33),
+  "pc":   (length, 3.08568e18), }
+\end{Verbatim}
+
+Note that we only define \emph{atomic} units here. There should be no
+operations in the registry symbol strings. When we parse non-atomic
+units like \texttt{Msun/Mpc**3}, we use the registry to look up the
+symbols. The unit system in yt knows how to handle units like
+\texttt{Mpc} by looking up unit symbols with and without prefixes and
+modify the conversion factor appropriately.
+
+We construct a \texttt{Unit} object by providing a string containing
+atomic unit symbols, combined with operations in Python syntax, and the
+registry those atomic unit symbols are defined in. We use sympy's string
+parsing features to create the unit expression from the user-provided
+string.
+
+\texttt{Unit} objects are associated with four instance members, a unit
+\texttt{Expression} object, a dimensionality \texttt{Expression} object,
+a \texttt{UnitRegistry} instance, and a scalar conversion factor to CGS
+units. These data are available for a \texttt{Unit} object by accessing
+the \texttt{expr}, \texttt{dimensions}, \texttt{registry}, and
+\texttt{cgs\_value} attributes, respectively.
+
+\texttt{Unit} provides the methods \texttt{same\_dimensions\_as}, which
+returns True if passed a \texttt{Unit} object that has equivalent
+dimensions, \texttt{get\_cgs\_equivalent}, which returns the equivalent
+cgs base units of the \texttt{Unit}, and the \texttt{is\_code\_unit}
+property, which is \texttt{True} if the unit is composed purely of code
+units and \texttt{False} otherwise. \texttt{Unit} also defines the
+\texttt{mul}, \texttt{div}, \texttt{pow}, and \texttt{eq} operations
+with other unit objects, making it easy to compose compound units
+algebraically.
+
+The \texttt{UnitRegistry} class provides the \texttt{add},
+\texttt{remove}, and \texttt{modify} methods which allows users to add,
+remove, and modify atomic unit definitions present in
+\texttt{UnitRegistry} objects. A dictionary lookup table is also
+attached to the \texttt{UnitRegistry} object, providing an interface to
+look up unit symbols. In general, unit registries should only be
+adjusted inside of a code frontend, since otherwise quantities and
+arrays might be created with inconsistent unit metadata. Once a unit
+object is created, it will not recieve updates if the original unit
+registry is modified.
+
+\subsubsection{Creating YTArray and YTQuantity
+instances}\label{creating-ytarray-and-ytquantity-instances}
+
+There are two ways to create new array and quantity objects: via a constructor,
+and by multiplying scalar data by a unit quantity.
+
+\paragraph{Class Constructor}\label{class-constructor}
+
+The primary internal interface for creating new arrays and quantities is through
+the class constructor for YTArray. The constructor takes three arguments. The
+first argument is the input scalar data, which can be an integer, float, list,
+or array. The second argument, \texttt{input\_units}, is a unit specification
+which must be a string or \texttt{Unit} instance. Last, users may optionally
+supply a UnitRegistry instance, which will be attached to the array. If no
+UnitRegistry is supplied, a default unit registry is used instead. Unit
+specification strings must be algebraic combinations of unit symbol names, using
+standard Python mathematical syntax (i.e. \texttt{**} for the power function,
+not \texttt{\^{}}).
+
+Here is a simple example of \texttt{YTArray} creation:
+
+\begin{Verbatim}
+>>> from yt.units import yt\_array, YTQuantity 
+>>> YTArray([1, 2, 3], `cm') 
+YTArray([1, 2, 3]) cm
+>>> YTQuantity(3, `J') 
+3 J
+\end{Verbatim}
+
+In addition to the class constructor, we have also defined two
+convenience functions, \texttt{quan}, and \texttt{arr}, for quantity and
+array creation that are attached to the \texttt{Dataset} base
+class. These were added to syntactically simplify the creation of arrays
+with the UnitRegistry instance associated with a dataset. These
+functions work exactly like the \texttt{YTArray} and \texttt{YTQuantity}
+constructors, but pass the \texttt{UnitRegistry} instance attached to
+the dataset to the underlying constructor call. For example:
+
+\begin{Verbatim}
+>>> import yt
+>>> ds = yt.load(``Enzo\_64/DD0043/data0043'')
+>>> ds.arr([1, 2, 3], `code_length').in_cgs() 
+YTArray([ 5.55e+26, 1.11e+27, 1.66e+27]) cm
+\end{Verbatim}
+
+This example illustrates that the array is being created using
+\texttt{ds.unit\_registry}, rather than the
+\texttt{default\_unit\_registry}, for which \texttt{code\_length} is
+equivalent to \texttt{cm}.
+
+\paragraph{Multiplication}\label{multiplication}
+
+New \texttt{YTArray} and \texttt{YTQuantity} instances can also be created by
+multiplying \texttt{YTArray} or \texttt{YTQuantity} instances by \texttt{float}
+or \texttt{ndarray} instances. To make it easier to create arrays using this
+mechanism, we have populated the \texttt{yt.units} namespace with predefined
+\texttt{YTQuantity} instances that correspond to common unit symbol names. For
+example:
+
+\begin{Verbatim}
+>>> from yt.units import meter, gram, kilogram, second, joule 
+>>> kilogram * meter**2 == joule 
+True
+>>> from yt.units import m, kg, s, W 
+>>> kg*m**2/s**3 == W
+True
+
+>>> from yt.units import kilometer 
+>>> three_kilometers = 3*kilometer 
+>>> print three_kilometers 
+3.0 km
+
+>>> from yt.units import gram, kilogram 
+>>> print gram+kilogram 
+1001.0 g 
+>>> print kilogram+gram 
+1.001 kg 
+>>> print kilogram/gram 
+1000.0 dimensionless
+\end{Verbatim}
+
+\subsubsection{Handling code units}\label{handling-code-units}
+
+
+Code units are tightly coupled to on-disk parameters. To handle this
+fact of life, the \texttt{yt} unit system can modify, add, and remove
+unit symbols via the \texttt{UnitRegistry}.
+
+\paragraph{Associating arrays with a coordinate
+system}\label{associating-arrays-with-a-coordinate-system}
+
+To create quantities and arrays in units defined by a simulation
+coordinate system, we associate a \texttt{UnitRegistry} instance with
+\texttt{Dataset} instances. This unit registry contains the
+metadata necessary to convert the array to CGS from some other known
+unit system and is available via the \texttt{unit\_registry} attribute
+that is attached to all \texttt{Dataset} instances.
+
+We have modified the definition for \texttt{set\_code\_units} in the
+\texttt{StaticOutput} base class. In this new implemenation, the
+predefined \texttt{code\_mass}, \texttt{code\_length},
+\texttt{code\_time}, and \texttt{code\_velocity} symbols are adjusted to
+the appropriate values and \texttt{length\_unit}, \texttt{time\_unit},
+\texttt{mass\_unit}, \texttt{velocity\_unit} attributes are attached to
+the \texttt{StaticOutput} instance. If there are frontend specific code
+units they should also be defined in subclasses by extending this function.
+
+\paragraph{Mixing modified unit
+registries}\label{mixing-modified-unit-registries}
+
+It becomes necessary to consider mixing unit registries whenever data
+needs to be compared between disparate datasets. The most
+straightforward example where this comes up is a cosmological simulation
+time series, where the code units evolve with time. The problem is quite
+general --- we want to be able to compare any two datasets, even if they
+are unrelated.
+
+We have designed the unit system to refer to a physical coordinate
+system based on CGS conversion factors. This means that operations on
+quantities with different unit registries will always agree since the
+final calculation is always performed in CGS.
+
+The examples below illustrate the consistency of this choice:
+
+\begin{Verbatim}
+>>> import yt
+>>> ds1 = yt.load(`Enzo_64/DD0002/data0002')
+>>> ds2 = yt.load(`Enzo_64/DD0043/data0043')
+>>> print ds1.length_unit, ds2.length_unit 
+128 Mpccm/h, 128 Mpccm/h
+>>> print ds1.length_unit.in_cgs()
+6.26145538088e+25 cm
+>>> print ds2.length_unit.in_cgs() 
+5.55517285026e+26 cm 
+
+
+>>> print ds1.length_unit*ds2.length_unit 
+145359.100149 Mpccm**2
+>>> print ds2.length_unit*ds1.length_unit 
+1846.7055432 Mpccm**2
+\end{Verbatim}
+
+For the last two examples, the answer is not the seemingly trivial
+$128^2\/=\/16384\,\rm{Mpccm}^2/h^2$. This is because the new quantity
+returned by the multiplication operation inherits the unit registry from
+the left object in binary operations. This convention is enforced for
+all binary operations on two \texttt{YTarray} objects. Results are
+always consistent when referencing an unambiguous physical coordinate system:
+
+\begin{Verbatim}
+>>> print (pf1.length_unit * pf2.length_unit).in_cgs() 
+3.4783466935e+52 cm**2 
+>>> print pf1.length_unit.in_cgs() * pf2.length_unit.in_cgs() 
+3.4783466935e+52 cm**2
+\end{Verbatim}
+
+\subsubsection{Handling cosmological
+units}\label{handling-cosmological-units}
+
+If we detect that we are loading a cosmological simulation performed in comoving
+coordinates, extra comoving units are added to the dataset's unit
+registry. Comoving length unit symbols are still named following the pattern
+\texttt{<length symbol>cm}, i.e. \texttt{Mpccm}.
+
+The $h$ symbol is treated as a base unit, \texttt{h}, which defaults to
+unity. The \texttt{Dataset.set\_units} updates the \texttt{h} symbol to
+the correct value when loading a cosmological simulation.
