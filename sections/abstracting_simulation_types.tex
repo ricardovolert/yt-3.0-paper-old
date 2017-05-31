@@ -64,9 +64,9 @@ edges and creating a bitmap of the selected grids.  Because this method --
 while not taking advantage of any data structures of even mild sophistication
 -- is able to take advantage of pipelining and cache-optimization, we have
 found that it is sufficiently performant in most geometries up to approximately
-$10^6$ grid objects.  In those cases, the distinction between "wide and
+$10^6$ grid objects.  In those cases, the distinction between ``wide and
 shallow" grid structures (where refinement occurs essentially everywhere, but
-not to a great degree) and "thin and deep" grid structures (where refinement
+not to a great degree) and ``thin and deep" grid structures (where refinement
 occurs in essentially one location but to very high levels), as well as the
 specific selection process, impact the overall performance.  The second-stage
 selection occurs within individual grids, where points are selected based on
@@ -100,7 +100,7 @@ this to approximately 140 bytes (about one gigabyte per eight million grids),
 with further reductions possible; for selection operations, we are also able to
 reduce the number of temporary arrays and utilize compressed mask
 representation, bringing peak memory usage down further.  The spatial-tree
-optimization substantially increases performance for "wide and shallow" dataset
+optimization substantially increases performance for ``wide and shallow" dataset
 selection.
 
 \subsection{Octree Analysis}
